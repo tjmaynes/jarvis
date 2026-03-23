@@ -64,17 +64,49 @@
   no_log: true
   notify: Restart openclaw
 
-- name: Set GitHub PAT environment
-  ansible.builtin.copy:
-    dest: /home/openclaw/.config/environment.d/github.conf
-    content: |
-      GITHUB_PAT={{ github_pat }}
+- name: Ensure .ssh directory exists for openclaw
+  ansible.builtin.file:
+    path: /home/openclaw/.ssh
+    state: directory
+    owner: openclaw
+    group: openclaw
+    mode: "0700"
+
+- name: Generate SSH key for openclaw user
+  community.crypto.openssh_keypair:
+    path: /home/openclaw/.ssh/id_ed25519
+    type: ed25519
     owner: openclaw
     group: openclaw
     mode: "0600"
-  no_log: true
-  notify: Restart openclaw
-  when: github_pat is defined
+  register: openclaw_ssh_key
+
+- name: Display public key for GitHub setup
+  ansible.builtin.debug:
+    msg: "Add this key to bewoogiebot GitHub account: {{ openclaw_ssh_key.public_key }}"
+  when: openclaw_ssh_key.changed
+
+- name: Configure SSH for GitHub
+  ansible.builtin.copy:
+    dest: /home/openclaw/.ssh/config
+    content: |
+      Host github.com
+        IdentityFile ~/.ssh/id_ed25519
+        IdentitiesOnly yes
+    owner: openclaw
+    group: openclaw
+    mode: "0600"
+
+- name: Configure git user for openclaw
+  community.general.git_config:
+    name: "{{ item.name }}"
+    value: "{{ item.value }}"
+    scope: global
+  become: true
+  become_user: openclaw
+  loop:
+    - { name: "user.name", value: "bewoogiebot" }
+    - { name: "user.email", value: "bewoogiebot@users.noreply.github.com" }
 
 - name: Set OpenClaw name environment
   ansible.builtin.copy:
