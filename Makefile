@@ -28,5 +28,5 @@ encrypt: ## Encrypt the vault file
 decrypt: ## Decrypt the vault file
 	$(ACTIVATE) && ansible-vault decrypt vars/vault.yml
 
-start: ## Start Jarvis VM
-	lume run jarvis --no-display
+start: ## Start Eros VM
+	lume run eros --no-display

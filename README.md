@@ -1,4 +1,4 @@
-# jarvis
+# openclaw-server
 
 > Personal assistant powered by OpenClaw, running on an ARM64 Ubuntu Server VM provisioned via Ansible.
 
@@ -17,13 +17,13 @@
 ### 1. Create the VM with `lume`
 
 ```bash
-lume create jarvis --os linux --cpu 4 --memory 8GB --disk-size 110GB
+lume create eros --os linux --cpu 4 --memory 8GB --disk-size 110GB
 ```
 
 First boot — mount the installer ISO:
 
 ```bash
-lume run jarvis --mount ~/Downloads/ubuntu-24.04.4-live-server-arm64.iso
+lume run eros --mount ~/Downloads/ubuntu-24.04.4-live-server-arm64.iso
 ```
 
 After installation — run headless:
@@ -60,7 +60,7 @@ On first deploy, the playbook generates an SSH key for the openclaw user and pri
 Verify the gateway is running:
 
 ```bash
-ssh jarvis
+ssh eros
 sudo su - openclaw
 systemctl --user status openclaw-gateway
 ```
@@ -75,7 +75,7 @@ systemctl --user status openclaw-gateway
 | `make lint` | Lint playbook and roles |
 | `make encrypt` | Encrypt the vault file |
 | `make decrypt` | Decrypt the vault file |
-| `make start` | Start Jarvis VM |
+| `make start` | Start Eros VM |
 
 ## Architecture
 
