@@ -4,10 +4,10 @@
     daemon_reload: true
     scope: user
   become: true
-  become_user: openclaw
+  become_user: "{{ openclaw_user }}"
   environment:
-    XDG_RUNTIME_DIR: /run/user/{{ openclaw_uid.stdout }}
-    DBUS_SESSION_BUS_ADDRESS: unix:path=/run/user/{{ openclaw_uid.stdout }}/bus
+    XDG_RUNTIME_DIR: /run/user/{{ openclaw_user_uid.stdout }}
+    DBUS_SESSION_BUS_ADDRESS: unix:path=/run/user/{{ openclaw_user_uid.stdout }}/bus
 
 - name: Restart openclaw
   ansible.builtin.systemd:
@@ -15,7 +15,7 @@
     state: restarted
     scope: user
   become: true
-  become_user: openclaw
+  become_user: "{{ openclaw_user }}"
   environment:
-    XDG_RUNTIME_DIR: /run/user/{{ openclaw_uid.stdout }}
-    DBUS_SESSION_BUS_ADDRESS: unix:path=/run/user/{{ openclaw_uid.stdout }}/bus
+    XDG_RUNTIME_DIR: /run/user/{{ openclaw_user_uid.stdout }}
+    DBUS_SESSION_BUS_ADDRESS: unix:path=/run/user/{{ openclaw_user_uid.stdout }}/bus

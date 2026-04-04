@@ -1,0 +1,26 @@
+[Unit]
+Description=Claude Code server
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/home/{{ claude_user }}/.local/share/mise/installs/node/{{ mise_node_version }}/bin/claude --channels plugin:discord@claude-plugins-official --dangerously-skip-permissions
+WorkingDirectory={{ claude_working_directory }}
+StandardInput=null
+StandardOutput=journal
+StandardError=journal
+Restart=always
+RestartSec=10
+Environment=HOME=/home/{{ claude_user }}
+Environment=PATH=/home/{{ claude_user }}/.local/share/mise/installs/node/{{ mise_node_version }}/bin:/home/{{ claude_user }}/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=XDG_RUNTIME_DIR=/run/user/%U
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/%U/bus
+Environment=DOCKER_HOST=unix:///run/user/%U/docker.sock
+
+# Hardening
+ReadWritePaths=/home/{{ claude_user }}/.claude
+ReadWritePaths=/home/{{ claude_user }}/.local/share/mise
+ReadWritePaths={{ claude_working_directory }}
+
+[Install]
+WantedBy=default.target

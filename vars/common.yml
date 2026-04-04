@@ -5,10 +5,14 @@ timezone: "America/Chicago"
 gateway_port: 18789
 
 # Official openclaw collection variables
+openclaw_default_user: "openclaw"
 tailscale_enabled: true
-nodejs_version: "24.14.0"
+# nodejs_version: "22"
 openclaw_install_mode: "release"
 openclaw_ssh_keys: []
+
+# Claude server
+claude_default_user: "claude"
 
 # Mise runtime versions
 mise_node_version: "24.14.0"
@@ -16,3 +20,4 @@ mise_python_version: "3.14.3"
 mise_go_version: "1.26"
 mise_direnv_version: "2.32.1"
 mise_just_version: "1.43.1"
+mise_bun_version: "1.2.14"

@@ -1,34 +1,38 @@
 ---
-- name: Install additional packages for openclaw user
+- name: Set service user
+  ansible.builtin.set_fact:
+    openclaw_user: "{{ openclaw_user }}"
+
+- name: Install additional packages for service user
   ansible.builtin.apt:
     name:
       - stow
     state: present
 
-- name: Get openclaw user UID
-  ansible.builtin.command: id -u openclaw
-  register: openclaw_uid
+- name: Get service user UID
+  ansible.builtin.command: id -u {{ openclaw_user }}
+  register: openclaw_user_uid
   changed_when: false
 
-- name: Enable lingering for openclaw user # noqa: command-instead-of-module
-  ansible.builtin.command: loginctl enable-linger openclaw
+- name: Enable lingering for service user # noqa: command-instead-of-module
+  ansible.builtin.command: loginctl enable-linger {{ openclaw_user }}
   changed_when: false
 
 - name: Ensure OpenClaw config directory exists
   ansible.builtin.file:
-    path: /home/openclaw/.openclaw
+    path: /home/{{ openclaw_user }}/.openclaw
     state: directory
-    owner: openclaw
-    group: openclaw
+    owner: "{{ openclaw_user }}"
+    group: "{{ openclaw_user }}"
     mode: "0700"
 
 - name: Check if openclaw daemon is installed # noqa: command-instead-of-module
   ansible.builtin.command: systemctl --user list-unit-files openclaw-gateway.service
   become: true
-  become_user: openclaw
+  become_user: "{{ openclaw_user }}"
   environment:
-    XDG_RUNTIME_DIR: /run/user/{{ openclaw_uid.stdout }}
-    DBUS_SESSION_BUS_ADDRESS: unix:path=/run/user/{{ openclaw_uid.stdout }}/bus
+    XDG_RUNTIME_DIR: /run/user/{{ openclaw_user_uid.stdout }}
+    DBUS_SESSION_BUS_ADDRESS: unix:path=/run/user/{{ openclaw_user_uid.stdout }}/bus
   register: openclaw_service_check
   changed_when: false
   failed_when: false
@@ -36,85 +40,30 @@
 - name: Install openclaw daemon
   ansible.builtin.command: openclaw daemon install
   become: true
-  become_user: openclaw
+  become_user: "{{ openclaw_user }}"
   environment:
-    HOME: /home/openclaw
-    PATH: /home/openclaw/.local/bin:/usr/local/bin:/usr/bin:/bin
-    XDG_RUNTIME_DIR: /run/user/{{ openclaw_uid.stdout }}
-    DBUS_SESSION_BUS_ADDRESS: unix:path=/run/user/{{ openclaw_uid.stdout }}/bus
+    HOME: /home/{{ openclaw_user }}
+    PATH: /home/{{ openclaw_user }}/.local/bin:/usr/local/bin:/usr/bin:/bin
+    XDG_RUNTIME_DIR: /run/user/{{ openclaw_user_uid.stdout }}
+    DBUS_SESSION_BUS_ADDRESS: unix:path=/run/user/{{ openclaw_user_uid.stdout }}/bus
   changed_when: true
   when: "'openclaw-gateway.service' not in openclaw_service_check.stdout"
 
 - name: Ensure environment.d directory exists
   ansible.builtin.file:
-    path: /home/openclaw/.config/environment.d
+    path: /home/{{ openclaw_user }}/.config/environment.d
     state: directory
-    owner: openclaw
-    group: openclaw
+    owner: "{{ openclaw_user }}"
+    group: "{{ openclaw_user }}"
     mode: "0755"
 
-- name: Set Telegram bot token environment
+- name: Set Discord bot token environment
   ansible.builtin.copy:
-    dest: /home/openclaw/.config/environment.d/telegram.conf
+    dest: /home/{{ openclaw_user }}/.config/environment.d/discord.conf
     content: |
-      OPENCLAW_TELEGRAM_TOKEN={{ telegram_bot_token }}
-    owner: openclaw
-    group: openclaw
+      OPENCLAW_DISCORD_TOKEN={{ discord_bot_token }}
+    owner: "{{ openclaw_user }}"
+    group: "{{ openclaw_user }}"
     mode: "0600"
   no_log: true
   notify: Restart openclaw
-
-- name: Ensure .ssh directory exists for openclaw
-  ansible.builtin.file:
-    path: /home/openclaw/.ssh
-    state: directory
-    owner: openclaw
-    group: openclaw
-    mode: "0700"
-
-- name: Generate SSH key for openclaw user
-  community.crypto.openssh_keypair:
-    path: /home/openclaw/.ssh/id_ed25519
-    type: ed25519
-    owner: openclaw
-    group: openclaw
-    mode: "0600"
-  register: openclaw_ssh_key
-
-- name: Display public key for GitHub setup
-  ansible.builtin.debug:
-    msg: "Add this key to bewoogiebot GitHub account: {{ openclaw_ssh_key.public_key }}"
-  when: openclaw_ssh_key.changed
-
-- name: Configure SSH for GitHub
-  ansible.builtin.copy:
-    dest: /home/openclaw/.ssh/config
-    content: |
-      Host github.com
-        IdentityFile ~/.ssh/id_ed25519
-        IdentitiesOnly yes
-    owner: openclaw
-    group: openclaw
-    mode: "0600"
-
-- name: Configure git user for openclaw
-  community.general.git_config:
-    name: "{{ item.name }}"
-    value: "{{ item.value }}"
-    scope: global
-  become: true
-  become_user: openclaw
-  loop:
-    - { name: "user.name", value: "bewoogiebot" }
-    - { name: "user.email", value: "bewoogiebot@users.noreply.github.com" }
-
-- name: Set OpenClaw name environment
-  ansible.builtin.copy:
-    dest: /home/openclaw/.config/environment.d/openclaw.conf
-    content: |
-      OPENCLAW_NAME={{ openclaw_name }}
-    owner: openclaw
-    group: openclaw
-    mode: "0644"
-  notify: Restart openclaw
-  when: openclaw_name is defined

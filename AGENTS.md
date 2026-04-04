@@ -2,32 +2,49 @@
 
 ## Project overview
 
-Ansible project that provisions and deploys an OpenClaw personal assistant on an ARM64 Ubuntu Server VM managed by [lume](https://github.com/trycua/lume).
+Ansible project that provisions AI agent servers on ARM64 Ubuntu Server VMs managed by [lume](https://github.com/trycua/lume). Currently manages two servers: **helios** (OpenClaw gateway) and **athena** (Claude Code server).
 
 ## Structure
 
 ```
-playbooks/deploy.yml    # Single playbook — runs all roles
+playbooks/
+  deploy-openclaw.yml     # OpenClaw deployment (openclaw_servers)
+  deploy-claude.yml       # Claude server deployment (claude_servers)
 roles/
-  openclaw/             # Daemon setup, env vars, additional packages
-  tailscale/            # Tailnet join, firewall rules, binary permissions
-  mise/                 # Runtime installer (Python, etc.)
+  debian/                 # Base packages, SSH, service user creation, unattended-upgrades
+  security/               # UFW firewall (SSH allowed first, then deny-by-default), fail2ban
+  docker/                 # Docker CE, DOCKER-USER chain (UFW bypass prevention)
+  openclaw/               # Daemon setup, Discord integration, env vars
+  tailscale/              # Tailnet join, firewall rules, binary permissions
+  mise/                   # Runtime installer (Node, Python, Go, bun, etc.)
+  claude/                 # Claude Code, Discord plugin, systemd, SSH/GitHub, mise activation
 vars/
-  common.yml            # Shared variables
-  vault.yml             # Encrypted secrets (ansible-vault)
-inventory/hosts.yml     # Host definitions with per-host variables
+  common.yml              # Shared variables
+  vault.yml               # Encrypted secrets (ansible-vault)
+inventory/hosts.yml       # Host definitions with per-host variables
+scripts/
+  setup-vm.sh             # Idempotent lume VM creation script
 ```
 
 ## Key conventions
 
-- One playbook (`deploy.yml`) handles both initial setup and updates
+- Two playbooks: `deploy-openclaw.yml` for openclaw_servers, `deploy-claude.yml` for claude_servers
 - System-level tasks run as root (`become: true` at play level)
-- OpenClaw-specific tasks use `become_user: openclaw` at the task level
+- The `openclaw` role is parameterized via `openclaw_user` per-host
+- The `claude` role is parameterized via `claude_user` per-host
+- The `debian` role is parameterized via `debian_user` per-host — controls service user creation (skips if user already exists via `id` check)
+- The `docker` role is parameterized: set `docker_user` per-host (defaults to `claude`) to control which user is added to the docker group
+- The `mise` role is parameterized: set `mise_user` per-host (defaults to `openclaw`), set `mise_bun_version` to include bun
+- The `security` role allows SSH before setting default-deny to prevent lockouts
 - Secrets are stored in `vars/vault.yml` and encrypted with `ansible-vault`
-- Host-specific variables (e.g. `openclaw_name`) go in `inventory/hosts.yml`, not in roles
-- Environment variables for the openclaw user are managed via `~/.config/environment.d/*.conf` files
-- SSH key for GitHub access is generated on-server (never committed), linked to the `bewoogiebot` GitHub account
+- Host-specific variables (e.g. `mise_user`, `discord_bot_token`) go in `inventory/hosts.yml`, not in roles
+- Discord bot tokens are per-host: defined as `helios_bot_token` / `athena_bot_token` in vault, mapped to `discord_bot_token` per-host in inventory
+- Git user credentials for athena are stored in vault (`athena_git_user_name`, `athena_git_user_email`)
+- Environment variables for service users are managed via `~/.config/environment.d/*.conf` files
+- SSH keys for GitHub access are generated on-server (never committed) — managed by the `claude` role
+- The systemd service unit for claude-code is a Jinja2 template (`roles/claude/templates/claude-code.service.j2`)
 - All tasks must be idempotent — safe to re-run without side effects
+- VM creation via `scripts/setup-vm.sh` is idempotent — skips if VM already exists
 
 ## Secrets
 

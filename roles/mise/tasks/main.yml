@@ -1,4 +1,8 @@
 ---
+- name: Set mise user
+  ansible.builtin.set_fact:
+    _mise_user: "{{ mise_user }}"
+
 - name: Add mise GPG key
   ansible.builtin.get_url:
     url: https://mise.jdx.dev/gpg-key.pub
@@ -8,7 +12,11 @@
 - name: Add mise apt repository
   ansible.builtin.copy:
     dest: /etc/apt/sources.list.d/mise.list
-    content: "deb [signed-by=/etc/apt/keyrings/mise-archive-keyring.pub arch={{ ansible_architecture | regex_replace('aarch64', 'arm64') | regex_replace('x86_64', 'amd64') }}] https://mise.jdx.dev/deb stable main\n"
+    # yamllint disable-line rule:line-length
+    content: >-
+      deb [signed-by=/etc/apt/keyrings/mise-archive-keyring.pub
+      arch={{ ansible_architecture | regex_replace('aarch64', 'arm64') | regex_replace('x86_64', 'amd64') }}]
+      https://mise.jdx.dev/deb stable main
     mode: "0644"
 
 - name: Install mise
@@ -19,15 +27,15 @@
 
 - name: Create mise config directory
   ansible.builtin.file:
-    path: /home/openclaw/.config/mise
+    path: "/home/{{ _mise_user }}/.config/mise"
     state: directory
-    owner: openclaw
-    group: openclaw
+    owner: "{{ _mise_user }}"
+    group: "{{ _mise_user }}"
     mode: "0755"
 
 - name: Write mise config
   ansible.builtin.copy:
-    dest: /home/openclaw/.config/mise/config.toml
+    dest: "/home/{{ _mise_user }}/.config/mise/config.toml"
     content: |
       [tools]
       node = "{{ mise_node_version }}"
@@ -35,16 +43,19 @@
       go = "{{ mise_go_version }}"
       direnv = "{{ mise_direnv_version }}"
       just = "{{ mise_just_version }}"
-    owner: openclaw
-    group: openclaw
+      {% if mise_bun_version is defined %}
+      bun = "{{ mise_bun_version }}"
+      {% endif %}
+    owner: "{{ _mise_user }}"
+    group: "{{ _mise_user }}"
     mode: "0644"
   register: mise_config
 
 - name: Install mise runtimes
   ansible.builtin.command: mise install --yes
   become: true
-  become_user: openclaw
+  become_user: "{{ _mise_user }}"
   environment:
-    HOME: /home/openclaw
+    HOME: "/home/{{ _mise_user }}"
     MISE_YES: "1"
   changed_when: mise_config.changed

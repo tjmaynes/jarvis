@@ -1,0 +1,265 @@
+---
+- name: Set service user
+  ansible.builtin.set_fact:
+    claude_user: "{{ claude_user }}"
+
+- name: Configure scoped sudoers for service user
+  ansible.builtin.copy:
+    dest: "/etc/sudoers.d/{{ claude_user }}"
+    content: |
+      {{ claude_user }} ALL=(ALL) NOPASSWD: \
+        /usr/bin/systemctl start claude-code.service, \
+        /usr/bin/systemctl stop claude-code.service, \
+        /usr/bin/systemctl restart claude-code.service, \
+        /usr/bin/systemctl status claude-code.service, \
+        /usr/bin/systemctl enable claude-code.service, \
+        /usr/bin/systemctl disable claude-code.service
+      {{ claude_user }} ALL=(ALL) NOPASSWD: \
+        /usr/bin/journalctl -u claude-code.service
+    mode: "0440"
+    validate: "visudo -cf %s"
+
+- name: Install claude-code globally
+  ansible.builtin.command:
+    cmd: /home/{{ claude_user }}/.local/share/mise/installs/node/{{ mise_node_version }}/bin/npm install -g @anthropic-ai/claude-code
+  become: true
+  become_user: "{{ claude_user }}"
+  environment:
+    HOME: /home/{{ claude_user }}
+    PATH: "/home/{{ claude_user }}/.local/share/mise/installs/node/{{ mise_node_version }}/bin:{{ ansible_env.PATH }}"
+  changed_when: false
+
+- name: Add official Anthropic plugin marketplace
+  ansible.builtin.command:
+    argv:
+      - /home/{{ claude_user }}/.local/share/mise/installs/node/{{ mise_node_version }}/bin/claude
+      - plugins
+      - marketplace
+      - add
+      - anthropics/claude-plugins-official
+  become: true
+  become_user: "{{ claude_user }}"
+  environment:
+    HOME: /home/{{ claude_user }}
+    PATH: "/home/{{ claude_user }}/.local/share/mise/installs/node/{{ mise_node_version }}/bin:{{ ansible_env.PATH }}"
+  changed_when: false
+
+- name: Install Discord plugin
+  ansible.builtin.command:
+    cmd: /home/{{ claude_user }}/.local/share/mise/installs/node/{{ mise_node_version }}/bin/claude plugin install discord@claude-plugins-official
+  become: true
+  become_user: "{{ claude_user }}"
+  environment:
+    HOME: /home/{{ claude_user }}
+    PATH: "/home/{{ claude_user }}/.local/share/mise/installs/node/{{ mise_node_version }}/bin:{{ ansible_env.PATH }}"
+  changed_when: false
+
+- name: Get service user UID
+  ansible.builtin.command:
+    cmd: id -u {{ claude_user }}
+  register: claude_user_uid
+  changed_when: false
+
+- name: Enable lingering for service user # noqa: command-instead-of-module
+  ansible.builtin.command: loginctl enable-linger {{ claude_user }}
+  changed_when: false
+
+- name: Ensure XDG_RUNTIME_DIR exists for service user
+  ansible.builtin.file:
+    path: /run/user/{{ claude_user_uid.stdout }}
+    state: directory
+    owner: "{{ claude_user }}"
+    group: "{{ claude_user }}"
+    mode: "0700"
+
+- name: Create tmpfiles rule for service user runtime dir
+  ansible.builtin.copy:
+    dest: /etc/tmpfiles.d/{{ claude_user }}-runtime.conf
+    content: |
+      d /run/user/{{ claude_user_uid.stdout }} 0700 {{ claude_user }} {{ claude_user }} -
+    mode: "0644"
+
+- name: Enable user manager at boot for service user
+  ansible.builtin.systemd:
+    name: "user@{{ claude_user_uid.stdout }}"
+    enabled: true
+    state: started
+
+- name: Set XDG_RUNTIME_DIR in service user bashrc
+  ansible.builtin.lineinfile:
+    path: /home/{{ claude_user }}/.bashrc
+    line: 'export XDG_RUNTIME_DIR=/run/user/$(id -u)'
+    create: true
+    owner: "{{ claude_user }}"
+    group: "{{ claude_user }}"
+    mode: "0644"
+  become: true
+  become_user: "{{ claude_user }}"
+
+- name: Set DBUS_SESSION_BUS_ADDRESS in service user bashrc
+  ansible.builtin.lineinfile:
+    path: /home/{{ claude_user }}/.bashrc
+    line: 'export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u)/bus'
+  become: true
+  become_user: "{{ claude_user }}"
+
+- name: Activate mise in service user bashrc
+  ansible.builtin.lineinfile:
+    path: /home/{{ claude_user }}/.bashrc
+    line: 'eval "$(mise activate bash)"'
+  become: true
+  become_user: "{{ claude_user }}"
+
+- name: Add start-claude function to service user bashrc
+  ansible.builtin.blockinfile:
+    path: /home/{{ claude_user }}/.bashrc
+    marker: "# {mark} ANSIBLE MANAGED - start-claude"
+    block: |
+      start-claude() {
+        claude --channels plugin:discord@claude-plugins-official --dangerously-skip-permissions
+      }
+  become: true
+  become_user: "{{ claude_user }}"
+
+- name: Ensure working directory exists
+  ansible.builtin.file:
+    path: "{{ claude_working_directory }}"
+    state: directory
+    owner: "{{ claude_user }}"
+    group: "{{ claude_user }}"
+    mode: "0755"
+  become: true
+  become_user: "{{ claude_user }}"
+
+- name: Ensure .claude config directory exists
+  ansible.builtin.file:
+    path: /home/{{ claude_user }}/.claude
+    state: directory
+    owner: "{{ claude_user }}"
+    group: "{{ claude_user }}"
+    mode: "0700"
+  become: true
+  become_user: "{{ claude_user }}"
+
+- name: Create workspace directory structure
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ claude_user }}"
+    group: "{{ claude_user }}"
+    mode: "{{ item.mode }}"
+  become: true
+  become_user: "{{ claude_user }}"
+  loop:
+    - { path: "/home/{{ claude_user }}/.claude/sessions", mode: "0755" }
+    - { path: "/home/{{ claude_user }}/.claude/credentials", mode: "0700" }
+    - { path: "/home/{{ claude_user }}/.claude/data", mode: "0755" }
+    - { path: "/home/{{ claude_user }}/.claude/logs", mode: "0755" }
+    - { path: "/home/{{ claude_user }}/.claude/agents", mode: "0755" }
+    - { path: "/home/{{ claude_user }}/.claude/agents/main", mode: "0755" }
+    - { path: "/home/{{ claude_user }}/.claude/agents/main/agent", mode: "0700" }
+    - { path: "/home/{{ claude_user }}/.claude/skills", mode: "0755" }
+    - { path: "/home/{{ claude_user }}/.claude/channels/discord", mode: "0700" }
+
+- name: Write Discord bot token
+  ansible.builtin.copy:
+    dest: /home/{{ claude_user }}/.claude/channels/discord/.env
+    content: "DISCORD_BOT_TOKEN={{ discord_bot_token }}"
+    owner: "{{ claude_user }}"
+    group: "{{ claude_user }}"
+    mode: "0600"
+  become: true
+  become_user: "{{ claude_user }}"
+  no_log: true
+  notify:
+    - Restart claude
+
+- name: Ensure systemd user directory exists
+  ansible.builtin.file:
+    path: /home/{{ claude_user }}/.config/systemd/user
+    state: directory
+    owner: "{{ claude_user }}"
+    group: "{{ claude_user }}"
+    mode: "0755"
+  become: true
+  become_user: "{{ claude_user }}"
+
+- name: Write claude-code systemd user service
+  ansible.builtin.template:
+    src: claude-code.service.j2
+    dest: /home/{{ claude_user }}/.config/systemd/user/claude-code.service
+    owner: "{{ claude_user }}"
+    group: "{{ claude_user }}"
+    mode: "0644"
+  become: true
+  become_user: "{{ claude_user }}"
+  notify:
+    - Reload systemd
+    - Restart claude
+
+- name: Disable claude-code service
+  ansible.builtin.systemd_service:
+    name: claude-code.service
+    state: stopped
+    enabled: false
+    scope: user
+  become: true
+  become_user: "{{ claude_user }}"
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ claude_user_uid.stdout }}"
+    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ claude_user_uid.stdout }}/bus"
+
+- name: Ensure .ssh directory exists for service user
+  ansible.builtin.file:
+    path: /home/{{ claude_user }}/.ssh
+    state: directory
+    owner: "{{ claude_user }}"
+    group: "{{ claude_user }}"
+    mode: "0700"
+  become: true
+  become_user: "{{ claude_user }}"
+
+- name: Generate SSH key for service user
+  community.crypto.openssh_keypair:
+    path: /home/{{ claude_user }}/.ssh/id_ed25519
+    type: ed25519
+    owner: "{{ claude_user }}"
+    group: "{{ claude_user }}"
+    mode: "0600"
+  become: true
+  become_user: "{{ claude_user }}"
+  register: claude_ssh_key
+
+- name: Display public SSH key
+  ansible.builtin.debug:
+    msg: "Add this key to GitHub: {{ claude_ssh_key.public_key }}"
+  when: claude_ssh_key.changed  # noqa: no-handler
+
+- name: Configure SSH for GitHub
+  ansible.builtin.copy:
+    dest: /home/{{ claude_user }}/.ssh/config
+    owner: "{{ claude_user }}"
+    group: "{{ claude_user }}"
+    mode: "0600"
+    content: |
+      Host github.com
+        IdentityFile ~/.ssh/id_ed25519
+        IdentitiesOnly yes
+  become: true
+  become_user: "{{ claude_user }}"
+
+- name: Configure git user name
+  community.general.git_config:
+    name: user.name
+    value: "{{ git_user_name }}"
+    scope: global
+  become: true
+  become_user: "{{ claude_user }}"
+
+- name: Configure git user email
+  community.general.git_config:
+    name: user.email
+    value: "{{ git_user_email }}"
+    scope: global
+  become: true
+  become_user: "{{ claude_user }}"

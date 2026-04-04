@@ -1,5 +1,5 @@
 ---
-- name: Deploy OpenClaw
+- name: Deploy OpenClaw servers
   hosts: openclaw_servers
   become: true
   vars_files:
@@ -7,6 +7,7 @@
     - ../vars/vault.yml
   roles:
     - openclaw.installer.openclaw
+    - debian
     - tailscale
     - mise
     - openclaw

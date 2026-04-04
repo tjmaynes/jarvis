@@ -1,0 +1,156 @@
+---
+- name: Set docker user
+  ansible.builtin.set_fact:
+    docker_user: "{{ docker_user }}"
+
+- name: Install Docker prerequisites
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - curl
+      - gnupg
+      - uidmap
+      - dbus-user-session
+      - slirp4netns
+    state: present
+
+- name: Add Docker GPG key
+  ansible.builtin.get_url:
+    url: https://download.docker.com/linux/ubuntu/gpg
+    dest: /etc/apt/keyrings/docker.asc
+    mode: "0644"
+
+- name: Add Docker apt repository
+  ansible.builtin.copy:
+    dest: /etc/apt/sources.list.d/docker.list
+    # yamllint disable-line rule:line-length
+    content: >-
+      deb [arch={{ ansible_architecture | regex_replace('aarch64', 'arm64') | regex_replace('x86_64', 'amd64') }}
+      signed-by=/etc/apt/keyrings/docker.asc]
+      https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable
+    mode: "0644"
+
+- name: Install Docker packages
+  ansible.builtin.apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-buildx-plugin
+      - docker-compose-plugin
+    state: present
+    update_cache: true
+
+- name: Disable system-wide Docker daemon
+  ansible.builtin.systemd:
+    name: docker
+    enabled: false
+    state: stopped
+
+- name: Disable containerd system service
+  ansible.builtin.systemd:
+    name: containerd
+    enabled: false
+    state: stopped
+
+- name: Get docker user UID
+  ansible.builtin.command: id -u {{ docker_user }}
+  register: docker_user_uid
+  changed_when: false
+
+- name: Enable subordinate UID range for docker user
+  ansible.builtin.lineinfile:
+    path: /etc/subuid
+    regexp: "^{{ docker_user }}:"
+    line: "{{ docker_user }}:100000:65536"
+
+- name: Enable subordinate GID range for docker user
+  ansible.builtin.lineinfile:
+    path: /etc/subgid
+    regexp: "^{{ docker_user }}:"
+    line: "{{ docker_user }}:100000:65536"
+
+- name: Enable lingering for docker user  # noqa: command-instead-of-module
+  ansible.builtin.command: loginctl enable-linger {{ docker_user }}
+  changed_when: false
+
+- name: Ensure XDG_RUNTIME_DIR exists for docker user
+  ansible.builtin.file:
+    path: /run/user/{{ docker_user_uid.stdout }}
+    state: directory
+    owner: "{{ docker_user }}"
+    group: "{{ docker_user }}"
+    mode: "0700"
+
+- name: Start systemd user manager for docker user
+  ansible.builtin.systemd:
+    name: "user@{{ docker_user_uid.stdout }}"
+    enabled: true
+    state: started
+
+- name: Check if rootless Docker is installed
+  ansible.builtin.stat:
+    path: "/home/{{ docker_user }}/.config/systemd/user/docker.service"
+  register: docker_rootless_check
+
+- name: Install rootless Docker  # noqa: command-instead-of-module
+  ansible.builtin.command: dockerd-rootless-setuptool.sh install
+  become: true
+  become_user: "{{ docker_user }}"
+  environment:
+    HOME: "/home/{{ docker_user }}"
+    XDG_RUNTIME_DIR: "/run/user/{{ docker_user_uid.stdout }}"
+    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ docker_user_uid.stdout }}/bus"
+  when: not docker_rootless_check.stat.exists
+  changed_when: true
+
+- name: Ensure docker config directory exists
+  ansible.builtin.file:
+    path: "/home/{{ docker_user }}/.config/docker"
+    state: directory
+    owner: "{{ docker_user }}"
+    group: "{{ docker_user }}"
+    mode: "0700"
+  become: true
+  become_user: "{{ docker_user }}"
+
+- name: Configure rootless Docker daemon
+  ansible.builtin.copy:
+    dest: "/home/{{ docker_user }}/.config/docker/daemon.json"
+    content: |
+      {
+        "log-driver": "json-file",
+        "log-opts": {
+          "max-size": "10m",
+          "max-file": "3"
+        }
+      }
+    owner: "{{ docker_user }}"
+    group: "{{ docker_user }}"
+    mode: "0600"
+  become: true
+  become_user: "{{ docker_user }}"
+  notify: Restart rootless docker
+
+- name: Enable and start rootless Docker
+  ansible.builtin.systemd_service:
+    name: docker.service
+    state: started
+    enabled: true
+    scope: user
+  become: true
+  become_user: "{{ docker_user }}"
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ docker_user_uid.stdout }}"
+    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ docker_user_uid.stdout }}/bus"
+
+- name: Set DOCKER_HOST in service user bashrc
+  ansible.builtin.lineinfile:
+    path: "/home/{{ docker_user }}/.bashrc"
+    line: "export DOCKER_HOST=unix:///run/user/{{ docker_user_uid.stdout }}/docker.sock"
+    create: true
+    owner: "{{ docker_user }}"
+    group: "{{ docker_user }}"
+    mode: "0644"
+  become: true
+  become_user: "{{ docker_user }}"

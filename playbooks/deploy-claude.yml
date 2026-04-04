@@ -1,0 +1,13 @@
+---
+- name: Deploy Claude servers
+  hosts: claude_servers
+  become: true
+  vars_files:
+    - ../vars/common.yml
+    - ../vars/vault.yml
+  roles:
+    - debian
+    - security
+    - docker
+    - mise
+    - claude
