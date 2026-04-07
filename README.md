@@ -6,18 +6,39 @@
 
 - [Python 3](https://www.python.org/)
 - [Homebrew](https://brew.sh/) (macOS — used to install [lume](https://github.com/trycua/lume) via the bundled `Brewfile`)
-- [Ubuntu Server ARM64 ISO](https://ubuntu.com/download/server/arm)
+- An Ubuntu Server ISO downloaded into the repo root. Pick the architecture that matches your host:
+  - [Ubuntu Server 24.04 LTS — ARM64](https://ubuntu.com/download/server/arm) (Apple Silicon, Raspberry Pi, etc.)
+  - [Ubuntu Server 24.04 LTS — x86_64 / amd64](https://ubuntu.com/download/server)
+
+  The Makefile defaults to `./ubuntu-24.04.4-live-server-amd64.iso` — rename the flag to match whichever ISO you downloaded.
 
 ## Getting Started
 
-### 1. Create VMs
+### 1. Create a VM
+
+The fastest path is the generic `setup` target — pick a hostname for your new VM and run:
 
 ```bash
-make setup_rosie     # Create rosie VM (4GB RAM, 60GB disk)
-make setup_athena    # Create athena VM (8GB RAM, 110GB disk)
+make setup HOST=my-agent
 ```
 
-This runs `scripts/setup-vm.sh` which creates the lume VM and boots the Ubuntu installer. The script is idempotent — it skips creation if the VM already exists.
+That uses the default sizing (8GB RAM, 110GB disk) and the ISO referenced in the Makefile. To customize memory, disk, or the ISO directly, call the underlying script:
+
+```bash
+./scripts/setup-vm.sh "my-agent" \
+  --memory "8GB" \
+  --disk-size "110GB" \
+  --iso "./ubuntu-24.04.4-live-server-amd64.iso"
+```
+
+This repo also ships named convenience targets for the maintainer's two hosts — feel free to delete or replace them when forking:
+
+```bash
+make setup_rosie     # rosie VM (4GB RAM, 60GB disk)
+make setup_athena    # athena VM (8GB RAM, 110GB disk)
+```
+
+`scripts/setup-vm.sh` creates the lume VM and boots the Ubuntu installer. The script is idempotent — it skips creation if the VM already exists.
 
 ### 2. Install Ansible and dependencies
 
@@ -27,22 +48,68 @@ make install
 
 This runs `brew bundle` (installing `lume` from the `Brewfile`), creates a Python virtualenv, and installs the Ansible collections listed in `collections/requirements.yml`.
 
-### 3. Configure secrets
+### 3. Pick a playbook
+
+Several example playbooks live in `playbooks/` — each one wires a different role chain for a specific agent stack:
+
+| Example | Stack |
+|---|---|
+| `playbooks/deploy.hermes.example.yml` | debian, security, docker, mise, hermes (Hermes Agent + Honcho) |
+| `playbooks/deploy.openclaw.example.yml` | debian, tailscale, mise, openclaw |
+| `playbooks/deploy.claude.example.yml` | debian, security, docker, mise, claude (Claude Code) |
+
+Copy whichever fits your use case to `playbooks/deploy.yml` (the file the Make targets actually invoke), and copy `inventory/hosts.example.yml` to `inventory/hosts.yml`:
+
+```bash
+cp playbooks/deploy.hermes.example.yml playbooks/deploy.yml
+cp inventory/hosts.example.yml inventory/hosts.yml
+```
+
+Then:
+
+- In `playbooks/deploy.yml`, change `hosts:` to match the hostname(s) you created in step 1.
+- In `inventory/hosts.yml`, replace the example host(s) with your own — set `hostname` / `ansible_host` and rename the per-host vault keys (e.g., `rosie_bot_token` → `<your-host>_bot_token`) to match what you'll define in step 4.
+
+### 4. Create your vault
+
+The `vars/vault.yml` checked into this repo is encrypted with the maintainer's key — forks need their own. Start from a fresh plaintext file and fill in values for whatever your chosen playbook references:
+
+```bash
+cat > vars/vault.yml <<'YAML'
+---
+# Per-host connection info
+my_agent_ip: 192.168.x.x
+
+# Per-host Discord bot token (referenced from inventory/hosts.yml)
+my_agent_bot_token: REPLACE_ME
+
+# Shared secrets referenced by the playbook's vars block
+# (e.g., the hermes example references default_firecrawl_api_key /
+# default_firecrawl_base_url — add only what your playbook uses)
+default_firecrawl_api_key: REPLACE_ME
+default_firecrawl_base_url: https://api.firecrawl.dev
+YAML
+
+make encrypt   # prompts for a vault password — remember it
+```
+
+To edit later:
 
 ```bash
 make decrypt
-# Edit vars/vault.yml with real values (IPs, bot tokens)
+# edit vars/vault.yml
 make encrypt
 ```
 
-### 4. Deploy
+> Shared, non-secret defaults (timezone, runtime versions, default user names, ports) live in `vars/common.yml` — usually no edits needed unless you want to override a default.
+
+### 5. Deploy
 
 ```bash
-make deploy HOST=rosie    # Deploy to rosie
-make deploy HOST=athena   # Deploy to athena
+make deploy HOST=my-agent
 ```
 
-### 5. Post-deploy setup
+### 6. Post-deploy setup
 
 On first deploy, the hermes role generates an SSH key and prints the public key. Add it to the appropriate GitHub account under Settings > SSH and GPG keys.
 
@@ -68,7 +135,7 @@ Tail the gateway logs:
 hermes-logs
 ```
 
-### 6. Discord bot setup
+### 7. Discord bot setup
 
 Each host needs its own Discord bot. For each host:
 

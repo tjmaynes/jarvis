@@ -1,0 +1,22 @@
+---
+- name: Deploy Hermes servers
+  hosts: rosie,athena
+  become: true
+  vars_files:
+    - ../vars/common.yml
+    - ../vars/vault.yml
+  roles:
+    - debian
+    - security
+    - docker
+    - mise
+    - hermes
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+    hermes_user: "{{ hermes_default_user }}"
+    debian_user: "{{ hermes_default_user }}"
+    security_user: "{{ hermes_default_user }}"
+    mise_user: "{{ hermes_default_user }}"
+    docker_user: "{{ hermes_default_user }}"
+    firecrawl_api_key: "{{ default_firecrawl_api_key }}"
+    firecrawl_base_url: "{{ default_firecrawl_base_url }}"

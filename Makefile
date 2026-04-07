@@ -15,13 +15,13 @@ install: ## Install Ansible and dependencies
 	$(ACTIVATE) && ansible-galaxy collection install -r collections/requirements.yml -p collections
 
 setup_rosie: ## Create the rosie VM
-	./scripts/setup-vm.sh "rosie" --memory "4GB" --disk-size "60GB" --iso="./ubuntu-24.04.4-live-server-amd64.iso"
+	./scripts/setup-vm.sh "rosie" --memory "4GB" --disk-size "60GB" --iso "./ubuntu-24.04.4-live-server-amd64.iso"
 
 setup_athena: ## Create the athena VM
-	./scripts/setup-vm.sh "athena" --memory "8GB" --disk-size "110GB" --iso="./ubuntu-24.04.4-live-server-amd64.iso"
+	./scripts/setup-vm.sh "athena" --memory "8GB" --disk-size "110GB" --iso "./ubuntu-24.04.4-live-server-amd64.iso"
 
 setup: ## Create a VM (usage: make setup HOST=some-host)
-	./scripts/setup-vm.sh "$(HOST)" --memory "8GB" --disk-size "110GB"
+	./scripts/setup-vm.sh "$(HOST)" --memory "8GB" --disk-size "110GB" --iso "./ubuntu-24.04.4-live-server-amd64.iso"
 
 deploy: ## Deploy to a host (usage: make deploy HOST=rosie)
 	$(PLAYBOOK) playbooks/deploy.yml --limit $(HOST)

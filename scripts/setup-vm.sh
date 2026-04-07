@@ -41,11 +41,6 @@ main() {
     exit 0
   fi
 
-  if [[ -z "${ISO_PATH:-}" ]]; then
-    echo "Please pass --iso with the path to the Ubuntu Server ISO."
-    exit 0
-  fi
-
   check_requirements
 
   local server_name="$1"
@@ -54,6 +49,7 @@ main() {
   local cpu=4
   local memory="8GB"
   local disk_size="110GB"
+  local iso=""
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -81,9 +77,15 @@ main() {
     esac
   done
 
+  if [[ -z "$iso" ]]; then
+    echo "Error: --iso is required"
+    usage
+    exit 1
+  fi
+
   if [[ ! -f "$iso" ]]; then
     echo "Error: ISO not found at $iso"
-    echo "Download from: https://ubuntu.com/download/server/arm"
+    echo "Download from: https://ubuntu.com/download/server/arm (ARM64) or https://ubuntu.com/download/server (x86_64)"
     exit 1
   fi
 

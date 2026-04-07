@@ -17,17 +17,18 @@ all:
       custom_ca_certificate_path: "{{ rosie_custom_ca_certificate_path }}"
       hermes_model: "openai/gpt-5.4-mini"
       hermes_inference_provider: "nous"
-    athena:
-      hostname: athena
-      ansible_host: "{{ athena_ip }}"
-      discord_bot_token: "{{ athena_bot_token }}"
-      git_user_name: "{{ default_git_user_name }}"
-      git_user_email: "{{ default_git_user_email }}"
-      discord_allowed_users: "{{ athena_discord_allowed_users }}"
-      discord_home_channel: "{{ athena_discord_home_channel }}"
-      honcho_base_url: "{{ athena_honcho_base_url }}"
-      honcho_api_key: "{{ athena_honcho_api_key }}"
-      honcho_db_password: "{{ athena_honcho_db_password }}"
-      github_token: "{{ athena_github_token }}"
-      hermes_model: "openai/gpt-5.4"
-      hermes_inference_provider: "nous"
+  # children:
+    # openclaw_servers:
+    #   hosts:
+    #     openclaw1:
+    #       ansible_host: "{{ openclaw1_ip }}"
+    #       hostname: openclaw1
+    #       tailscale_authkey: "{{ openclaw1_tailscale_authkey }}"
+    #       discord_bot_token: "{{ openclaw1_discord_bot_token }}"
+    # claude_servers:
+    #   hosts:
+    #     claude1:
+    #       ansible_host: "{{ claude1_ip }}"
+    #       hostname: claude1
+    #       claude_working_directory: /home/{{ claude_default_user }}/workspace
+    #       discord_bot_token: "{{ claude1_discord_bot_token }}"
