@@ -15,11 +15,14 @@ install: ## Install Ansible and dependencies
 	$(ACTIVATE) && pip install -r requirements.txt
 	$(ACTIVATE) && $(ANSIBLE_CFG) ansible-galaxy collection install -r configuration/requirements.yml -p collections
 
-init: ## Initialize vault password (interactive)
-	./scripts/init.sh
+init: ## Initialize configuration (usage: make init BACKEND=orbstack)
+	$(ACTIVATE) && python3 scripts/init.py --backend "$(BACKEND)"
 
-setup: ## Create a VM (usage: make setup HOST=XXXX)
-	./scripts/setup-vm.sh "$(HOST)" --memory "8GB" --disk-size "110GB" --iso "./ubuntu-24.04.4-live-server-amd64.iso"
+setup_orbstack_vm: ## Create an orbstack VM (usage: make setup HOST=XXXX)
+	./scripts/setup.sh "$(HOST)" --backend "orbstack"
+
+setup_lume_vm: ## Create a lume VM (usage: make setup HOST=XXXX)
+	./scripts/setup.sh "$(HOST)" --backend "lume" --memory "8GB" --disk-size "110GB" --iso "./ubuntu-24.04.4-live-server-amd64.iso"
 
 deploy: ## Deploy to a host (usage: make deploy HOST=XXXX)
 	$(PLAYBOOK) --limit $(HOST)
@@ -36,8 +39,12 @@ encrypt: ## Encrypt the vault file
 decrypt: ## Decrypt the vault file
 	$(ACTIVATE) && $(ANSIBLE_CFG) ansible-vault decrypt configuration/vault.yml
 
-start: ## Start a VM (usage: make start HOST=XXXX)
+start: ## Start a VM (usage: make start HOST=XXXX BACKEND=lume)
+ifeq ($(BACKEND),orbstack)
+	orb start $(HOST)
+else
 	lume run $(HOST) --no-display
+endif
 
 connect_claude: ## SSH into a host in tmux (usage: make connect_claude HOST=XXXX)
 	ssh -t $(HOST) "sudo -iu claude tmux new-session -s remote-$(HOST)-session"

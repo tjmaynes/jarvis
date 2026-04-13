@@ -1,16 +1,16 @@
 # agent-playbooks
 
-> Ansible playbooks for provisioning agent servers — including [Hermes Agent](https://hermes-agent.nousresearch.com/), [OpenClaw](https://openclaw.org/), and [Claude Code](https://claude.ai/code) — on ARM64 Ubuntu Server VMs managed by [lume](https://github.com/trycua/lume).
+> Ansible playbooks for provisioning agent servers — including [Hermes Agent](https://hermes-agent.nousresearch.com/), [OpenClaw](https://openclaw.org/), and [Claude Code](https://claude.ai/code) — on Ubuntu Server VMs managed by [lume](https://github.com/trycua/lume) or [OrbStack](https://orbstack.dev).
 
 ## Requirements
 
 - [Python 3](https://www.python.org/)
 - [Homebrew](https://brew.sh/) (macOS — used to install [lume](https://github.com/trycua/lume) via the bundled `Brewfile`)
-- An Ubuntu Server ISO downloaded into the repo root. Pick the architecture that matches your host:
-  - [Ubuntu Server 24.04 LTS — ARM64](https://ubuntu.com/download/server/arm) (Apple Silicon, Raspberry Pi, etc.)
-  - [Ubuntu Server 24.04 LTS — x86_64 / amd64](https://ubuntu.com/download/server)
-
-  The Makefile defaults to `./ubuntu-24.04.4-live-server-amd64.iso` — rename the flag to match whichever ISO you downloaded.
+- A VM backend — either:
+  - **[lume](https://github.com/trycua/lume)** — full VMs from ISO. Requires an Ubuntu Server ISO in the repo root:
+    - [Ubuntu Server 24.04 LTS — ARM64](https://ubuntu.com/download/server/arm) (Apple Silicon, Raspberry Pi, etc.)
+    - [Ubuntu Server 24.04 LTS — x86_64 / amd64](https://ubuntu.com/download/server)
+  - **[OrbStack](https://orbstack.dev)** — lightweight Linux machines, no ISO needed
 
 ## Getting Started
 
@@ -22,37 +22,30 @@ make install
 
 This runs `brew bundle` (installing `lume` from the `Brewfile`), creates a Python virtualenv, and installs the Ansible collections listed in `configuration/requirements.yml`.
 
-### 2. Create a VM
+### 2. Initialize your configuration
 
 ```bash
-make setup HOST=my-agent
-```
-
-That uses the default sizing (8GB RAM, 110GB disk) and the ISO referenced in the Makefile. To customize, call the underlying script:
-
-```bash
-./scripts/setup-vm.sh "my-agent" \
-  --memory "8GB" \
-  --disk-size "110GB" \
-  --iso "./ubuntu-24.04.4-live-server-amd64.iso"
-```
-
-The script is idempotent — it skips creation if the VM already exists.
-
-### 3. Initialize your configuration
-
-```bash
-make init
+make init BACKEND=orbstack
+# or
+make init BACKEND=lume
 ```
 
 This interactive script prompts for:
-- **Remote SSH user** and **SSH key path**
+- **Remote SSH user** and **SSH key path** (defaults to `~/.orbstack/ssh/id_ed25519` for OrbStack, `~/.ssh/id_ed25519` for lume)
 - **Vault password** (encrypts your secrets)
-- **Host name** and **IP address** of the VM you just created
+- **AI assistant** — which agent stack to deploy:
 
-It generates a `configuration/` directory (gitignored) from the templates in `configuration.example/`, containing `ansible.cfg`, `.vault_pass`, `deploy.yml`, `hosts.yml`, `vault.yml`, and `requirements.yml`.
+| Choice | Stack |
+|---|---|
+| hermes | base, docker, hermes (Hermes Agent + Honcho) |
+| openclaw | base, openclaw |
+| claude-code | base, docker, claude (Claude Code) |
 
-### 4. Edit your vault and encrypt
+- **Host name** and **IP address** of the VM you will create
+
+It renders the Jinja2 templates in `configuration.example/` into a `configuration/` directory (gitignored), containing `ansible.cfg`, `.vault_pass`, `deploy.yml`, `hosts.yml`, `vault.yml`, and `requirements.yml`. If `configuration/` already exists, the script skips setup and prints next steps.
+
+### 3. Edit your vault and encrypt
 
 Open `configuration/vault.yml` and fill in your real secrets (bot tokens, API keys, etc.), then encrypt:
 
@@ -67,6 +60,34 @@ make decrypt
 # edit configuration/vault.yml
 make encrypt
 ```
+
+### 4. Create a VM
+
+**Using OrbStack** (recommended — no ISO needed):
+
+```bash
+make setup_orbstack_vm HOST=my-agent
+```
+
+**Using lume** (full VM from ISO):
+
+```bash
+make setup_lume_vm HOST=my-agent
+```
+
+To customize, call the underlying script directly:
+
+```bash
+# OrbStack — supports --distro (default: ubuntu) and --amd64 for x86_64 emulation
+./scripts/setup.sh "my-agent" --backend orbstack --distro debian:bookworm
+./scripts/setup.sh "my-agent" --backend orbstack --amd64
+
+# lume — requires --iso, supports --memory and --disk-size
+./scripts/setup.sh "my-agent" --backend lume \
+  --iso "./ubuntu-24.04.4-live-server-amd64.iso"
+```
+
+The script is idempotent — it skips creation if the VM already exists.
 
 ### 5. Deploy
 
@@ -139,15 +160,18 @@ hermes gateway start
 | Command | Purpose |
 |---|---|
 | `make install` | Install Ansible, ansible-lint, and collections |
-| `make init` | Initialize user configuration (interactive) |
-| `make setup HOST=<name>` | Create a custom VM (8GB RAM, 110GB disk) |
+| `make init BACKEND=<lume\|orbstack>` | Initialize configuration from backend template |
+| `make setup_orbstack_vm HOST=<name>` | Create an OrbStack VM |
+| `make setup_lume_vm HOST=<name>` | Create a lume VM (8GB RAM, 110GB disk) |
 | `make deploy HOST=<name>` | Deploy to a host |
 | `make check HOST=<name>` | Dry-run to preview changes |
 | `make lint` | Lint playbooks |
 | `make encrypt` | Encrypt the vault file |
 | `make decrypt` | Decrypt the vault file |
-| `make start HOST=<name>` | Start a VM |
+| `make start HOST=<name> BACKEND=<lume\|orbstack>` | Start a VM |
 | `make connect_hermes HOST=<name>` | SSH into a host as hermes user in tmux |
+| `make connect_claude HOST=<name>` | SSH into a host as claude user in tmux |
+| `make connect_openclaw HOST=<name>` | SSH into a host as openclaw user in tmux |
 
 ## Architecture
 

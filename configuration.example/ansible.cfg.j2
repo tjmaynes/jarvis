@@ -3,8 +3,8 @@ collections_path = ../collections
 inventory = hosts.yml
 host_key_checking = True
 vault_password_file = .vault_pass
-remote_user = CHANGEME_REMOTE_USER
-private_key_file = CHANGEME_SSH_KEY_PATH
+remote_user = << remote_user >>
+private_key_file = << ssh_key_path >>
 deprecation_warnings = False
 remote_tmp = /tmp/.ansible-${USER}/tmp
 

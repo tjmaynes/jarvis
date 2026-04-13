@@ -1,0 +1,30 @@
+---
+- name: Deploy Agent servers
+  hosts: << host_name >>
+  become: true
+  vars_files:
+    - vault.yml
+  roles:
+<%- if assistant == 'hermes' %>
+    - tjmaynes.agents.base
+    - tjmaynes.agents.docker
+    - tjmaynes.agents.hermes
+<%- elif assistant == 'openclaw' %>
+    - tjmaynes.agents.base
+    - tjmaynes.agents.openclaw
+<%- elif assistant == 'claude-code' %>
+    - tjmaynes.agents.base
+    - tjmaynes.agents.docker
+    - tjmaynes.agents.claude
+<%- endif %>
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+<%- if assistant == 'hermes' %>
+    agent_name: "hermes"
+    docker_honcho_enabled: true
+<%- elif assistant == 'openclaw' %>
+    agent_name: "openclaw"
+<%- elif assistant == 'claude-code' %>
+    agent_name: "claude"
+    docker_honcho_enabled: true
+<%- endif %>
